@@ -1,0 +1,151 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Motion Graph Converter</title>
+  <script src="https://cdn.plot.ly/plotly-2.15.0.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    canvas { border: 1px solid #ccc; margin-top: 10px; touch-action: none; }
+    select, button { margin: 10px 5px; padding: 5px; }
+    #controls { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
+  </style>
+</head>
+<body>
+  <h2>🚀 Motion Graph Converter</h2>
+  <div id="controls">
+    <label for="inputType">Input Graph Type:</label>
+    <select id="inputType">
+      <option value="distance">Distance-Time</option>
+      <option value="displacement">Displacement-Time</option>
+      <option value="speed">Speed-Time</option>
+      <option value="velocity">Velocity-Time</option>
+      <option value="acceleration">Acceleration-Time</option>
+      <option value="velocity-acceleration">Velocity-Acceleration</option>
+      <option value="velocity-displacement">Velocity-Displacement</option>
+    </select>
+
+    <label for="outputType">Output Graph Type:</label>
+    <select id="outputType">
+      <option value="distance">Distance-Time</option>
+      <option value="displacement">Displacement-Time</option>
+      <option value="speed">Speed-Time</option>
+      <option value="velocity">Velocity-Time</option>
+      <option value="acceleration">Acceleration-Time</option>
+      <option value="velocity-acceleration">Velocity-Acceleration</option>
+      <option value="velocity-displacement">Velocity-Displacement</option>
+    </select>
+
+    <button onclick="clearCanvas()">Clear</button>
+    <button onclick="generateOutputGraph()">Generate Output Graph</button>
+  </div>
+
+  <canvas id="drawCanvas" width="600" height="300"></canvas>
+  <div id="outputGraph" style="width: 100%; height: 400px;"></div>
+
+  <script>
+    const canvas = document.getElementById("drawCanvas");
+    const ctx = canvas.getContext("2d");
+    let points = [];
+
+    const getCanvasCoords = (e) => {
+      const rect = canvas.getBoundingClientRect();
+      let x, y;
+      if (e.touches) {
+        x = e.touches[0].clientX - rect.left;
+        y = e.touches[0].clientY - rect.top;
+      } else {
+        x = e.clientX - rect.left;
+        y = e.clientY - rect.top;
+      }
+      return { x, y };
+    };
+
+    const smoothStraightLines = (pts) => {
+      if (pts.length < 3) return pts;
+      const threshold = 3;
+      let dx = (pts[pts.length-1].x - pts[0].x) / (pts.length - 1);
+      let dy = (pts[pts.length-1].y - pts[0].y) / (pts.length - 1);
+      let straightened = [];
+      for (let i = 0; i < pts.length; i++) {
+        straightened.push({ x: pts[0].x + i * dx, y: pts[0].y + i * dy });
+      }
+      return straightened;
+    };
+
+    const drawPoints = () => {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      if (points.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(points[0].x, points[0].y);
+      points.forEach(p => ctx.lineTo(p.x, p.y));
+      ctx.stroke();
+    };
+
+    const handleInput = (e) => {
+      e.preventDefault();
+      const pos = getCanvasCoords(e);
+      points.push(pos);
+      drawPoints();
+    };
+
+    canvas.addEventListener("mousedown", () => {
+      canvas.addEventListener("mousemove", handleInput);
+    });
+
+    canvas.addEventListener("mouseup", () => {
+      canvas.removeEventListener("mousemove", handleInput);
+    });
+
+    canvas.addEventListener("touchstart", handleInput);
+    canvas.addEventListener("touchmove", handleInput);
+
+    function clearCanvas() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      points = [];
+      Plotly.purge("outputGraph");
+    }
+
+    function generateOutputGraph() {
+      if (points.length < 2) return alert("Draw at least 2 points!");
+      points = smoothStraightLines(points);
+      drawPoints();
+
+      const inputType = document.getElementById("inputType").value;
+      const outputType = document.getElementById("outputType").value;
+
+      const times = points.map(p => p.x);
+      const values = points.map(p => canvas.height - p.y);
+      const normTime = times.map(t => ((t - times[0]) / 100).toFixed(2));
+
+      let output = [];
+      if (inputType === "velocity" && outputType === "displacement") {
+        output = [0];
+        for (let i = 1; i < values.length; i++) {
+          const dt = (times[i] - times[i - 1]) / 100;
+          const v1 = values[i - 1];
+          const v2 = values[i];
+          const area = 0.5 * (v1 + v2) * dt;
+          output.push(output[output.length - 1] + area);
+        }
+      } else {
+        output = values;
+      }
+
+      Plotly.newPlot("outputGraph", [{
+        x: normTime,
+        y: output,
+        mode: 'lines+markers',
+        line: { shape: 'spline' },
+        name: `${outputType} Graph`
+      }], {
+        title: `Output Graph: ${outputType.replace("-", " vs ").toUpperCase()}`,
+        xaxis: { title: 'Time (s)' },
+        yaxis: { title: outputType }
+      });
+    }
+  </script>
+</body>
+</html>
