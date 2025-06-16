@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Motion Graph Converter</title>
+  <script src="https://cdn.plot.ly/plotly-2.15.0.min.js"></script>
+  <style>
+    body { font-family: Arial; margin: 20px; }
+    canvas { border: 1px solid #ccc; margin-top: 10px; cursor: crosshair; }
+    select, button { margin: 10px 5px; padding: 5px; }
+  </style>
+</head>
+<body>
+  <h2>🎯 Motion Graph Converter</h2>
+  <label for="inputType">Input Graph Type:</label>
+  <select id="inputType">
+    <option value="velocity">Velocity vs Time</option>
+  </select>
+
+  <label for="outputType">Output Graph Type:</label>
+  <select id="outputType">
+    <option value="displacement">Displacement vs Time</option>
+  </select>
+
+  <br/>
+  <canvas id="drawCanvas" width="600" height="300"></canvas>
+  <br/>
+  <button onclick="generateOutputGraph()">Generate Output Graph</button>
+  <button onclick="clearCanvas()">Clear</button>
+
+  <div id="outputGraph" style="width: 600px; height: 300px;"></div>
+
+  <script>
+    const canvas = document.getElementById("drawCanvas");
+    const ctx = canvas.getContext("2d");
+    let points = [];
+    let drawing = false;
+
+    canvas.addEventListener("mousedown", e => {
+      drawing = true;
+      points = [];
+      addPoint(e);
+    });
+
+    canvas.addEventListener("mousemove", e => {
+      if (!drawing) return;
+      addPoint(e);
+      drawPoints();
+    });
+
+    canvas.addEventListener("mouseup", () => drawing = false);
+    canvas.addEventListener("mouseleave", () => drawing = false);
+
+    function addPoint(e) {
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      points.push({x, y});
+    }
+
+    function drawPoints() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.beginPath();
+      if (points.length > 0) {
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+          ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.stroke();
+      }
+    }
+
+    function interpolate(x1, y1, x2, y2, x) {
+      return y1 + ((y2 - y1) * (x - x1)) / (x2 - x1);
+    }
+
+    function generateOutputGraph() {
+      if (points.length < 2) return alert("Draw at least 2 points!");
+
+      const timesRaw = points.map(p => p.x);
+      const velocitiesRaw = points.map(p => canvas.height - p.y);
+      const t0 = timesRaw[0];
+      const times = timesRaw.map(t => (t - t0) / 100);
+
+      const fineTime = [];
+      const fineVelocity = [];
+      const step = 0.05;
+
+      for (let i = 1; i < times.length; i++) {
+        const tStart = times[i - 1];
+        const tEnd = times[i];
+        const vStart = velocitiesRaw[i - 1];
+        const vEnd = velocitiesRaw[i];
+        for (let t = tStart; t < tEnd; t += step) {
+          const v = interpolate(tStart, vStart, tEnd, vEnd, t);
+          fineTime.push(t);
+          fineVelocity.push(v);
+        }
+      }
+      fineTime.push(times[times.length - 1]);
+      fineVelocity.push(velocitiesRaw[velocitiesRaw.length - 1]);
+
+      let displacement = 0;
+      const displacements = [0];
+      for (let i = 1; i < fineTime.length; i++) {
+        const dt = fineTime[i] - fineTime[i - 1];
+        const avgV = 0.5 * (fineVelocity[i] + fineVelocity[i - 1]);
+        displacement += avgV * dt;
+        displacements.push(displacement);
+      }
+
+      Plotly.newPlot("outputGraph", [{
+        x: fineTime,
+        y: displacements,
+        mode: 'lines',
+        line: { shape: 'spline' },
+        name: 'Displacement-Time'
+      }], {
+        title: 'Output Graph: Displacement vs Time',
+        xaxis: { title: 'Time (s)' },
+        yaxis: { title: 'Displacement (m)' }
+      });
+    }
+
+    function clearCanvas() {
+      points = [];
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      Plotly.purge("outputGraph");
+    }
+  </script>
+</body>
+</html>
